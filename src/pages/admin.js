@@ -1,14 +1,14 @@
 // pages/admin.js - Admin Panel Page
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
-import Head from 'next/head';
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import Head from "next/head";
 
 const API = process.env.NEXT_PUBLIC_API_URL;
 
 const AdminPanel = () => {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [editingStudent, setEditingStudent] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
@@ -21,26 +21,26 @@ const AdminPanel = () => {
     try {
       const response = await fetch(`${API}/users`);
       const data = await response.json();
-      setStudents(data);
+      setStudents(data || []);
     } catch (err) {
-      setError('Failed to fetch students');
+      setError("Failed to fetch students");
     } finally {
       setLoading(false);
     }
   };
 
   const deleteStudent = async (id) => {
-    if (!confirm('Are you sure you want to delete this student?')) return;
+    if (!confirm("Are you sure you want to delete this student?")) return;
 
     try {
       const response = await fetch(`${API}/users/${id}`, {
-        method: 'DELETE',
+        method: "DELETE",
       });
       if (response.ok) {
         fetchStudents();
       }
     } catch (err) {
-      setError('Failed to delete student');
+      setError("Failed to delete student");
     }
   };
 
@@ -85,10 +85,7 @@ const AdminPanel = () => {
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h2 className="text-2xl font-bold">Admin Panel - Student Management</h2>
-              <button
-                onClick={() => setShowAddForm(true)}
-                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
-              >
+              <button onClick={() => setShowAddForm(true)} className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700">
                 Add New Student
               </button>
             </div>
@@ -120,21 +117,11 @@ const AdminPanel = () => {
               <table className="min-w-full divide-y divide-gray-200">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Name
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      PIN
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Email
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Check-ins
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">PIN</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Check-ins</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -147,28 +134,19 @@ const AdminPanel = () => {
                         <div className="text-sm text-gray-900">{student.pin}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{student.email || 'N/A'}</div>
+                        <div className="text-sm text-gray-900">{student.email || "N/A"}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-900">{student.checkins?.length || 0}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                        <Link 
-                          href={`/admin/student/${student._id}`}
-                          className="text-green-600 hover:text-green-900"
-                        >
+                        <Link href={`/admin/student/${student._id}`} className="text-green-600 hover:text-green-900">
                           History
                         </Link>
-                        <button
-                          onClick={() => setEditingStudent(student)}
-                          className="text-blue-600 hover:text-blue-900"
-                        >
+                        <button onClick={() => setEditingStudent(student)} className="text-blue-600 hover:text-blue-900">
                           Edit
                         </button>
-                        <button
-                          onClick={() => deleteStudent(student._id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
+                        <button onClick={() => deleteStudent(student._id)} className="text-red-600 hover:text-red-900">
                           Delete
                         </button>
                       </td>
@@ -176,11 +154,9 @@ const AdminPanel = () => {
                   ))}
                 </tbody>
               </table>
-              
+
               {students.length === 0 && !loading && (
-                <div className="text-center py-8 text-gray-500">
-                  No students found. Add your first student using the button above.
-                </div>
+                <div className="text-center py-8 text-gray-500">No students found. Add your first student using the button above.</div>
               )}
             </div>
           </div>
@@ -193,31 +169,33 @@ const AdminPanel = () => {
 // Student Form Component (for Add/Edit)
 const StudentForm = ({ student, onSave, onCancel }) => {
   const [formData, setFormData] = useState({
-    name: student?.name || '',
-    pin: student?.pin || '',
-    email: student?.email || '',
-    phone: student?.phone || '',
-    username: student?.username || '',
-    roles: student?.roles || ['student'],
-    games: student?.games || []
+    name: student?.name || "",
+    pin: student?.pin || "",
+    email: student?.email || "",
+    phone: student?.phone || "",
+    username: student?.username || "",
+    status: student?.status || "",
+    source: student?.source || "",
+    roles: student?.roles || ["student"],
+    games: student?.games || [],
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
 
-  const gameOptions = ['craps', 'roulette', 'blackjack', 'baccarat', 'poker', 'pai-gow', 'keno', 'uth', 'sic-bo'];
+  const gameOptions = ["craps", "roulette", "blackjack", "baccarat", "poker", "pai-gow", "keno", "uth", "sic-bo"];
 
   const handleSubmit = async () => {
     setLoading(true);
-    setError('');
+    setError("");
 
     try {
       const url = student ? `${API}/users/${student._id}` : `${API}/users`;
-      const method = student ? 'PUT' : 'POST';
-      
+      const method = student ? "PUT" : "POST";
+
       const response = await fetch(url, {
         method,
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify(formData),
       });
@@ -225,30 +203,26 @@ const StudentForm = ({ student, onSave, onCancel }) => {
       if (response.ok) {
         onSave();
       } else {
-        setError('Failed to save student');
+        setError("Failed to save student");
       }
     } catch (err) {
-      setError('Error connecting to server');
+      setError("Error connecting to server");
     } finally {
       setLoading(false);
     }
   };
 
   const handleGameToggle = (game) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      games: prev.games.includes(game)
-        ? prev.games.filter(g => g !== game)
-        : [...prev.games, game]
+      games: prev.games.includes(game) ? prev.games.filter((g) => g !== game) : [...prev.games, game],
     }));
   };
 
   return (
     <div className="bg-white p-6 rounded-lg shadow-md">
-      <h3 className="text-lg font-semibold mb-4">
-        {student ? 'Edit Student' : 'Add New Student'}
-      </h3>
-      
+      <h3 className="text-lg font-semibold mb-4">{student ? "Edit Student" : "Add New Student"}</h3>
+
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
@@ -257,63 +231,77 @@ const StudentForm = ({ student, onSave, onCancel }) => {
               type="text"
               required
               value={formData.name}
-              onChange={(e) => setFormData(prev => ({...prev, name: e.target.value}))}
+              onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">PIN</label>
             <input
               type="text"
               value={formData.pin}
-              onChange={(e) => setFormData(prev => ({...prev, pin: e.target.value}))}
+              onChange={(e) => setFormData((prev) => ({ ...prev, pin: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
             <input
               type="email"
               value={formData.email}
-              onChange={(e) => setFormData(prev => ({...prev, email: e.target.value}))}
+              onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
             <input
               type="tel"
               value={formData.phone}
-              onChange={(e) => setFormData(prev => ({...prev, phone: e.target.value}))}
+              onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
-            <input
-              type="text"
-              value={formData.username}
-              onChange={(e) => setFormData(prev => ({...prev, username: e.target.value}))}
+            <label className="block text-sm font-medium text-gray-700 mb-1">Student Type</label>
+            <select
+              value={formData.source}
+              onChange={(e) => setFormData((prev) => ({ ...prev, source: e.target.value }))}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+            >
+              <option value="">Select Source</option>
+              <option value="website">Regular</option>
+              <option value="referral">Palace Station</option>
+              <option value="social_media">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <select
+              value={formData.status}
+              onChange={(e) => setFormData((prev) => ({ ...prev, status: e.target.value }))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Select Status</option>
+              <option value="Current Student">Current Student</option>
+              <option value="New Student">New Student</option>
+              <option value="Suspended">Suspended</option>
+              <option value="Graduate">Graduate</option>
+            </select>
           </div>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">Games</label>
           <div className="grid grid-cols-3 gap-2">
-            {gameOptions.map(game => (
+            {gameOptions.map((game) => (
               <label key={game} className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={formData.games.includes(game)}
-                  onChange={() => handleGameToggle(game)}
-                  className="rounded"
-                />
+                <input type="checkbox" checked={formData.games.includes(game)} onChange={() => handleGameToggle(game)} className="rounded" />
                 <span className="text-sm capitalize">{game}</span>
               </label>
             ))}
@@ -327,17 +315,10 @@ const StudentForm = ({ student, onSave, onCancel }) => {
         )}
 
         <div className="flex space-x-4">
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50"
-          >
-            {loading ? 'Saving...' : 'Save'}
+          <button onClick={handleSubmit} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:opacity-50">
+            {loading ? "Saving..." : "Save"}
           </button>
-          <button
-            onClick={onCancel}
-            className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600"
-          >
+          <button onClick={onCancel} className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600">
             Cancel
           </button>
         </div>
