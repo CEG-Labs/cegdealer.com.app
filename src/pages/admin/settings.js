@@ -224,7 +224,7 @@ const AdminSettings = () => {
                 Date-Based Restrictions
               </h3>
               <p className="text-sm text-gray-600 mb-4">
-                Enforce end dates configured in each student's profile.
+                Enforce end dates configured in each student&apos;s profile.
               </p>
               <div className="space-y-4">
                 <label className="flex items-start space-x-3 p-4 rounded-md border-2 border-gray-200 hover:border-blue-300 cursor-pointer transition-colors">
@@ -244,13 +244,13 @@ const AdminSettings = () => {
                       Enforce End of Class Date
                     </div>
                     <p className="text-sm text-gray-600 mt-1">
-                      When enabled, students cannot check in after their "End of
-                      Class Date" has passed.
+                      When enabled, students cannot check in after their
+                      &quot;End of Class Date&quot; has passed.
                     </p>
                     <div className="mt-2 text-xs text-gray-500">
-                      <strong>Example:</strong> If a student's End of Class Date
-                      is Dec 31, 2024, they will be blocked from checking in
-                      starting Jan 1, 2025.
+                      <strong>Example:</strong> If a student&apos;s End of Class
+                      Date is Dec 31, 2024, they will be blocked from checking
+                      in starting Jan 1, 2025.
                     </div>
                   </div>
                   {settings.enforceClassEndDate && (
@@ -277,13 +277,13 @@ const AdminSettings = () => {
                       Enforce End of Practice Date
                     </div>
                     <p className="text-sm text-gray-600 mt-1">
-                      When enabled, students cannot check in after their "End of
-                      Practice Date" has passed.
+                      When enabled, students cannot check in after their{" "}
+                      <strong>End of Practice Date</strong> has passed.
                     </p>
                     <div className="mt-2 text-xs text-gray-500">
-                      <strong>Example:</strong> If a student's End of Practice
-                      Date is Jun 30, 2025, they will be blocked from checking
-                      in starting Jul 1, 2025.
+                      <strong>Example:</strong> If a student&apos;s End of
+                      Practice Date is Jun 30, 2025, they will be blocked from
+                      checking in starting Jul 1, 2025.
                     </div>
                   </div>
                   {settings.enforcePracticeEndDate && (

@@ -909,7 +909,7 @@ const StudentForm = ({ student, onSave, onCancel }) => {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Driver's License / ID Number
+                Drivers License / ID Number
               </label>
               <input
                 type="text"
