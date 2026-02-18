@@ -6,6 +6,9 @@ import Head from "next/head";
 const API = process.env.NEXT_PUBLIC_API_URL;
 
 const StudentLogin = () => {
+  const [nameQuery, setNameQuery] = useState("");
+  const [matchingStudents, setMatchingStudents] = useState([]);
+  const [selectedStudent, setSelectedStudent] = useState(null);
   const [pin, setPin] = useState("");
   const [student, setStudent] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -14,10 +17,36 @@ const StudentLogin = () => {
   const [hasActiveSession, setHasActiveSession] = useState(false);
   const [settings, setSettings] = useState(null);
   const [validationError, setValidationError] = useState("");
+  const [allStudents, setAllStudents] = useState([]);
 
   useEffect(() => {
     fetchSettings();
+    fetchAllStudents();
   }, []);
+
+  useEffect(() => {
+    if (nameQuery.trim().length > 0) {
+      const term = nameQuery.toLowerCase();
+      const matches = allStudents.filter(
+        (s) =>
+          (s.firstName && s.firstName.toLowerCase().includes(term)) ||
+          (s.lastName && s.lastName.toLowerCase().includes(term))
+      );
+      setMatchingStudents(matches);
+    } else {
+      setMatchingStudents([]);
+    }
+  }, [nameQuery, allStudents]);
+
+  const fetchAllStudents = async () => {
+    try {
+      const response = await fetch(`${API}/users`);
+      const data = await response.json();
+      setAllStudents(data);
+    } catch (err) {
+      console.error("Failed to fetch students:", err);
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -92,40 +121,49 @@ const StudentLogin = () => {
     return { valid: true };
   };
 
+  const handleSelectStudent = (s) => {
+    setSelectedStudent(s);
+    setMatchingStudents([]);
+    setNameQuery("");
+    setError("");
+    setValidationError("");
+    setPin("");
+  };
+
   const handlePinSubmit = async () => {
-    if (!pin) return;
+    if (!pin || !selectedStudent) return;
 
     setLoading(true);
     setError("");
     setValidationError("");
 
+    if (selectedStudent.pin !== pin) {
+      setError("Incorrect PIN. Please try again.");
+      setLoading(false);
+      return;
+    }
+
+    // Refetch the student to get current session data
     try {
-      const response = await fetch(`${API}/users?pin=${pin}`);
-      const data = await response.json();
+      const response = await fetch(`${API}/users/${selectedStudent._id}`);
+      const foundStudent = await response.json();
 
-      if (response.ok && data.length > 0) {
-        const foundStudent = data[0];
-
-        // Validate student before allowing check-in/out
-        const validation = validateStudent(foundStudent);
-        if (!validation.valid) {
-          setValidationError(validation.message);
-          setStudent(null);
-          setLoading(false);
-          return;
-        }
-
-        setStudent(foundStudent);
-
-        // Check if student has an active session
-        const activeSessions = foundStudent.sessions?.filter(
-          (session) => session.checkin && !session.checkout
-        );
-        setHasActiveSession(activeSessions && activeSessions.length > 0);
-      } else {
-        setError("Student not found. Please check your PIN.");
+      // Validate student before allowing check-in/out
+      const validation = validateStudent(foundStudent);
+      if (!validation.valid) {
+        setValidationError(validation.message);
         setStudent(null);
+        setLoading(false);
+        return;
       }
+
+      setStudent(foundStudent);
+
+      // Check if student has an active session
+      const activeSessions = foundStudent.sessions?.filter(
+        (session) => session.checkin && !session.checkout
+      );
+      setHasActiveSession(activeSessions && activeSessions.length > 0);
     } catch (err) {
       setError("Error connecting to server.");
       setStudent(null);
@@ -159,6 +197,7 @@ const StudentLogin = () => {
       if (response.ok) {
         setSuccess("Check-in successful!");
         setStudent(null);
+        setSelectedStudent(null);
         setPin("");
         setHasActiveSession(false);
         setTimeout(() => setSuccess(""), 3000);
@@ -191,6 +230,7 @@ const StudentLogin = () => {
       if (response.ok) {
         setSuccess("Check-out successful!");
         setStudent(null);
+        setSelectedStudent(null);
         setPin("");
         setHasActiveSession(false);
         setTimeout(() => setSuccess(""), 3000);
@@ -232,8 +272,53 @@ const StudentLogin = () => {
               Student Check-in
             </h2>
 
-            {!student ? (
+            {!student && !selectedStudent ? (
+              /* Step 1: Name Search */
               <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Enter your name:
+                  </label>
+                  <input
+                    type="text"
+                    value={nameQuery}
+                    onChange={(e) => setNameQuery(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Search by first or last name"
+                    autoFocus
+                  />
+                </div>
+
+                {matchingStudents.length > 0 && (
+                  <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-md">
+                    {matchingStudents.map((s) => (
+                      <button
+                        key={s._id}
+                        onClick={() => handleSelectStudent(s)}
+                        className="w-full text-left px-4 py-3 hover:bg-blue-50 border-b border-gray-100 last:border-b-0 transition-colors"
+                      >
+                        <span className="font-medium text-gray-900">
+                          {getFullName(s)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {nameQuery.trim().length > 0 && matchingStudents.length === 0 && (
+                  <p className="text-sm text-gray-500 text-center">
+                    No students found matching "{nameQuery}"
+                  </p>
+                )}
+              </div>
+            ) : !student && selectedStudent ? (
+              /* Step 2: PIN Verification */
+              <div className="space-y-4">
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-md text-center">
+                  <p className="text-blue-800 font-medium">
+                    {getFullName(selectedStudent)}
+                  </p>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Enter your PIN:
@@ -246,6 +331,7 @@ const StudentLogin = () => {
                     placeholder="Enter PIN"
                     disabled={loading}
                     onKeyPress={(e) => e.key === "Enter" && handlePinSubmit()}
+                    autoFocus
                   />
                 </div>
                 <button
@@ -253,7 +339,18 @@ const StudentLogin = () => {
                   disabled={loading || !pin}
                   className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? "Checking..." : "Find Student"}
+                  {loading ? "Verifying..." : "Verify PIN"}
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedStudent(null);
+                    setPin("");
+                    setError("");
+                    setValidationError("");
+                  }}
+                  className="w-full bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600"
+                >
+                  Back
                 </button>
               </div>
             ) : (
@@ -292,6 +389,7 @@ const StudentLogin = () => {
                   <button
                     onClick={() => {
                       setStudent(null);
+                      setSelectedStudent(null);
                       setPin("");
                       setError("");
                       setValidationError("");

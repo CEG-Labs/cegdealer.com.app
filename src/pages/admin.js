@@ -516,6 +516,7 @@ const AdminPanel = () => {
 const RosterExportModal = ({ students, onClose, getFullName }) => {
   const API = process.env.NEXT_PUBLIC_API_URL;
   const [dateFilter, setDateFilter] = useState("");
+  const [registrationDateFilter, setRegistrationDateFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [exporting, setExporting] = useState(false);
 
@@ -542,19 +543,40 @@ const RosterExportModal = ({ students, onClose, getFullName }) => {
       filtered = filtered.filter((s) => s.status === statusFilter);
     }
 
-    // Filter by last checkout date
-    if (dateFilter) {
-      const filterDate = new Date(dateFilter);
-      filterDate.setHours(0, 0, 0, 0);
-
+    // Filter by date: last checkout OR registration date (either match passes)
+    if (dateFilter || registrationDateFilter) {
       filtered = filtered.filter((s) => {
-        const lastCheckout = getLastCheckoutDate(s);
-        if (!lastCheckout) return false;
+        let matchesCheckout = false;
+        let matchesRegistration = false;
 
-        const checkoutDate = new Date(lastCheckout);
-        checkoutDate.setHours(0, 0, 0, 0);
+        if (dateFilter) {
+          const filterDate = new Date(dateFilter);
+          filterDate.setHours(0, 0, 0, 0);
+          const lastCheckout = getLastCheckoutDate(s);
+          if (lastCheckout) {
+            const checkoutDate = new Date(lastCheckout);
+            checkoutDate.setHours(0, 0, 0, 0);
+            matchesCheckout = checkoutDate >= filterDate;
+          }
+        }
 
-        return checkoutDate >= filterDate;
+        if (registrationDateFilter) {
+          const regFilterDate = new Date(registrationDateFilter);
+          regFilterDate.setHours(0, 0, 0, 0);
+          if (s.registrationDate) {
+            const regDate = new Date(s.registrationDate);
+            regDate.setHours(0, 0, 0, 0);
+            matchesRegistration = regDate >= regFilterDate;
+          }
+        }
+
+        // OR logic: if both filters are set, either can match
+        if (dateFilter && registrationDateFilter) {
+          return matchesCheckout || matchesRegistration;
+        }
+        // If only one filter is set, use that result
+        if (dateFilter) return matchesCheckout;
+        return matchesRegistration;
       });
     }
 
@@ -595,6 +617,7 @@ const RosterExportModal = ({ students, onClose, getFullName }) => {
       "Foreign Address",
       "Status",
       "Source",
+      "Registration Date",
       "End of Class Date",
       "End of Practice Date",
       "Last Checkout Date",
@@ -618,6 +641,9 @@ const RosterExportModal = ({ students, onClose, getFullName }) => {
         student.foreignAddress || "",
         student.status || "",
         student.source || "",
+        student.registrationDate
+          ? new Date(student.registrationDate).toLocaleDateString()
+          : "",
         student.endOfClassDate
           ? new Date(student.endOfClassDate).toLocaleDateString()
           : "",
@@ -673,6 +699,18 @@ const RosterExportModal = ({ students, onClose, getFullName }) => {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
+              Filter by Registration Date (on or after)
+            </label>
+            <input
+              type="date"
+              value={registrationDateFilter}
+              onChange={(e) => setRegistrationDateFilter(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
               Filter by Last Checkout Date (on or after)
             </label>
             <input
@@ -682,6 +720,14 @@ const RosterExportModal = ({ students, onClose, getFullName }) => {
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
+
+          {registrationDateFilter && dateFilter && (
+            <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-md">
+              <p className="text-xs text-yellow-800">
+                Both date filters active: students matching <strong>either</strong> date will be included.
+              </p>
+            </div>
+          )}
 
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
             <p className="text-sm text-blue-800">
@@ -733,6 +779,9 @@ const StudentForm = ({ student, onSave, onCancel }) => {
       : "",
     endOfPracticeDate: student?.endOfPracticeDate
       ? new Date(student.endOfPracticeDate).toISOString().split("T")[0]
+      : "",
+    registrationDate: student?.registrationDate
+      ? new Date(student.registrationDate).toISOString().split("T")[0]
       : "",
     roles: student?.roles || ["student"],
     games: student?.games || [],
@@ -1070,10 +1119,27 @@ const StudentForm = ({ student, onSave, onCancel }) => {
           </div>
         </div>
 
-        {/* Date Restrictions */}
+        {/* Registration & Date Restrictions */}
         <div className="border-b pb-4">
-          <h4 className="font-medium text-gray-700 mb-3">Date Restrictions</h4>
+          <h4 className="font-medium text-gray-700 mb-3">Dates</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Registration Date
+              </label>
+              <input
+                type="date"
+                value={formData.registrationDate}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    registrationDate: e.target.value,
+                  }))
+                }
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 End of Class Date
