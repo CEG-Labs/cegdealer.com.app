@@ -1,4 +1,4 @@
-// pages/admin.js - Admin Panel with Roster Export
+// pages/admin.js - Admin Panel with Filtering and Export
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Head from "next/head";
@@ -13,11 +13,14 @@ const AdminPanel = () => {
   const [error, setError] = useState("");
   const [editingStudent, setEditingStudent] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [selectedStudents, setSelectedStudents] = useState([]);
-  const [exporting, setExporting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [gameFilter, setGameFilter] = useState("");
+  const [registrationDateFilter, setRegistrationDateFilter] = useState("");
+  const [endOfClassDateFilter, setEndOfClassDateFilter] = useState("");
+  const [endOfPracticeDateFilter, setEndOfPracticeDateFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [showRosterExport, setShowRosterExport] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
 
   useEffect(() => {
     fetchStudents();
@@ -25,7 +28,7 @@ const AdminPanel = () => {
 
   useEffect(() => {
     filterStudents();
-  }, [searchTerm, students]);
+  }, [searchTerm, statusFilter, gameFilter, registrationDateFilter, endOfClassDateFilter, endOfPracticeDateFilter, students]);
 
   const fetchStudents = async () => {
     setLoading(true);
@@ -41,21 +44,80 @@ const AdminPanel = () => {
   };
 
   const filterStudents = () => {
-    if (!searchTerm.trim()) {
-      setFilteredStudents(students);
-      setCurrentPage(1);
-      return;
+    let filtered = students;
+
+    // Text search: name or email
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(
+        (student) =>
+          (student.firstName && student.firstName.toLowerCase().includes(term)) ||
+          (student.lastName && student.lastName.toLowerCase().includes(term)) ||
+          (student.email && student.email.toLowerCase().includes(term))
+      );
     }
 
-    const term = searchTerm.toLowerCase();
-    const filtered = students.filter(
-      (student) =>
-        (student.firstName && student.firstName.toLowerCase().includes(term)) ||
-        (student.lastName && student.lastName.toLowerCase().includes(term)) ||
-        (student.email && student.email.toLowerCase().includes(term))
-    );
+    // Status filter
+    if (statusFilter) {
+      filtered = filtered.filter((s) => s.status === statusFilter);
+    }
+
+    // Game filter
+    if (gameFilter) {
+      filtered = filtered.filter(
+        (s) => s.games && s.games.includes(gameFilter)
+      );
+    }
+
+    // Registration date filter (on or after)
+    if (registrationDateFilter) {
+      const filterDate = new Date(registrationDateFilter);
+      filterDate.setHours(0, 0, 0, 0);
+      filtered = filtered.filter((s) => {
+        if (!s.registrationDate) return false;
+        const regDate = new Date(s.registrationDate);
+        regDate.setHours(0, 0, 0, 0);
+        return regDate >= filterDate;
+      });
+    }
+
+    // End of class date filter (on or after)
+    if (endOfClassDateFilter) {
+      const filterDate = new Date(endOfClassDateFilter);
+      filterDate.setHours(0, 0, 0, 0);
+      filtered = filtered.filter((s) => {
+        if (!s.endOfClassDate) return false;
+        const classDate = new Date(s.endOfClassDate);
+        classDate.setHours(0, 0, 0, 0);
+        return classDate >= filterDate;
+      });
+    }
+
+    // End of practice date filter (on or after)
+    if (endOfPracticeDateFilter) {
+      const filterDate = new Date(endOfPracticeDateFilter);
+      filterDate.setHours(0, 0, 0, 0);
+      filtered = filtered.filter((s) => {
+        if (!s.endOfPracticeDate) return false;
+        const practiceDate = new Date(s.endOfPracticeDate);
+        practiceDate.setHours(0, 0, 0, 0);
+        return practiceDate >= filterDate;
+      });
+    }
+
     setFilteredStudents(filtered);
     setCurrentPage(1);
+  };
+
+  const hasActiveFilters = searchTerm || statusFilter || gameFilter || registrationDateFilter || endOfClassDateFilter || endOfPracticeDateFilter;
+
+  const clearAllFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("");
+    setGameFilter("");
+    setRegistrationDateFilter("");
+    setEndOfClassDateFilter("");
+    setEndOfPracticeDateFilter("");
   };
 
   const calculateTotalHours = (sessions) => {
@@ -82,54 +144,90 @@ const AdminPanel = () => {
     }
   };
 
-  const toggleStudentSelection = (studentId) => {
-    setSelectedStudents((prev) =>
-      prev.includes(studentId)
-        ? prev.filter((id) => id !== studentId)
-        : [...prev, studentId]
+  const getLastCheckoutDate = (student) => {
+    if (!student.sessions || student.sessions.length === 0) return null;
+    const sessionsWithCheckout = student.sessions.filter((s) => s.checkout);
+    if (sessionsWithCheckout.length === 0) return null;
+    const sortedSessions = sessionsWithCheckout.sort(
+      (a, b) => new Date(b.checkout) - new Date(a.checkout)
     );
+    return sortedSessions[0].checkout;
   };
 
-  const toggleSelectAll = () => {
-    const currentPageStudents = paginatedStudents.map((s) => s._id);
-    const allSelected = currentPageStudents.every((id) =>
-      selectedStudents.includes(id)
-    );
-
-    if (allSelected) {
-      setSelectedStudents((prev) =>
-        prev.filter((id) => !currentPageStudents.includes(id))
-      );
-    } else {
-      setSelectedStudents((prev) => [
-        ...new Set([...prev, ...currentPageStudents]),
-      ]);
-    }
-  };
-
-  const exportSelectedStudents = async () => {
-    if (selectedStudents.length === 0) {
-      alert("Please select at least one student to export");
+  const exportRoster = () => {
+    if (filteredStudents.length === 0) {
+      alert("No students to export");
       return;
     }
+    const csv = generateRosterCSV(filteredStudents);
+    downloadCSV(csv, `student-roster-${new Date().toISOString().split("T")[0]}.csv`);
+    setShowExportMenu(false);
+  };
 
-    setExporting(true);
-    try {
-      const studentDetailsPromises = selectedStudents.map((id) =>
-        fetch(`${API}/users/${id}`).then((r) => r.json())
-      );
-      const studentDetails = await Promise.all(studentDetailsPromises);
-
-      const csv = generateSessionsCSV(studentDetails);
-      downloadCSV(
-        csv,
-        `student-sessions-${new Date().toISOString().split("T")[0]}.csv`
-      );
-    } catch (err) {
-      setError("Failed to export data");
-    } finally {
-      setExporting(false);
+  const exportSessions = () => {
+    if (filteredStudents.length === 0) {
+      alert("No students to export");
+      return;
     }
+    const csv = generateSessionsCSV(filteredStudents);
+    downloadCSV(csv, `student-sessions-${new Date().toISOString().split("T")[0]}.csv`);
+    setShowExportMenu(false);
+  };
+
+  const generateRosterCSV = (students) => {
+    const headers = [
+      "First Name",
+      "Last Name",
+      "PIN",
+      "ID Number",
+      "Email",
+      "Phone",
+      "Street",
+      "City",
+      "State",
+      "Zip Code",
+      "Foreign Address",
+      "Status",
+      "Source",
+      "Registration Date",
+      "End of Class Date",
+      "End of Practice Date",
+      "Last Checkout Date",
+    ];
+    const rows = [headers];
+
+    students.forEach((student) => {
+      const lastCheckout = getLastCheckoutDate(student);
+      rows.push([
+        student.firstName || "",
+        student.lastName || "",
+        student.pin || "",
+        student.idNumber || "",
+        student.email || "",
+        student.phone || "",
+        student.street || "",
+        student.city || "",
+        student.state || "",
+        student.zipCode || "",
+        student.foreignAddress || "",
+        student.status || "",
+        student.source || "",
+        student.registrationDate
+          ? new Date(student.registrationDate).toLocaleDateString()
+          : "",
+        student.endOfClassDate
+          ? new Date(student.endOfClassDate).toLocaleDateString()
+          : "",
+        student.endOfPracticeDate
+          ? new Date(student.endOfPracticeDate).toLocaleDateString()
+          : "",
+        lastCheckout ? new Date(lastCheckout).toLocaleString() : "Never",
+      ]);
+    });
+
+    return rows
+      .map((row) => row.map((cell) => `"${cell}"`).join(","))
+      .join("\n");
   };
 
   const generateSessionsCSV = (students) => {
@@ -255,24 +353,34 @@ const AdminPanel = () => {
               <h2 className="text-2xl font-bold">
                 Admin Panel - Student Management
               </h2>
-              <div className="space-x-2">
-                <button
-                  onClick={() => setShowRosterExport(true)}
-                  className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700"
-                >
-                  Roster Export
-                </button>
-                {selectedStudents.length > 0 && (
+              <div className="flex items-center space-x-2">
+                <div className="relative">
                   <button
-                    onClick={exportSelectedStudents}
-                    disabled={exporting}
-                    className="bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 disabled:opacity-50"
+                    onClick={() => setShowExportMenu(!showExportMenu)}
+                    className="bg-orange-600 text-white px-4 py-2 rounded-md hover:bg-orange-700 inline-flex items-center"
                   >
-                    {exporting
-                      ? "Exporting..."
-                      : `Export Selected (${selectedStudents.length})`}
+                    Export ({filteredStudents.length})
+                    <svg className="ml-2 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
                   </button>
-                )}
+                  {showExportMenu && (
+                    <div className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg border border-gray-200 z-10">
+                      <button
+                        onClick={exportRoster}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-t-md"
+                      >
+                        Export Roster
+                      </button>
+                      <button
+                        onClick={exportSessions}
+                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded-b-md"
+                      >
+                        Export Sessions
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <button
                   onClick={() => setShowAddForm(true)}
                   className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
@@ -286,15 +394,6 @@ const AdminPanel = () => {
               <div className="p-3 bg-red-50 border border-red-200 rounded-md">
                 <p className="text-red-700">{error}</p>
               </div>
-            )}
-
-            {/* Roster Export Modal */}
-            {showRosterExport && (
-              <RosterExportModal
-                students={students}
-                onClose={() => setShowRosterExport(false)}
-                getFullName={getFullName}
-              />
             )}
 
             {/* Add/Edit Form */}
@@ -313,8 +412,8 @@ const AdminPanel = () => {
               />
             )}
 
-            {/* Search Bar */}
-            <div className="bg-white rounded-lg shadow p-4">
+            {/* Filters */}
+            <div className="bg-white rounded-lg shadow p-4 space-y-3">
               <div className="flex items-center gap-4">
                 <div className="flex-1">
                   <input
@@ -325,16 +424,80 @@ const AdminPanel = () => {
                     className="w-full px-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
-                {searchTerm && (
+                {hasActiveFilters && (
                   <button
-                    onClick={() => setSearchTerm("")}
-                    className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600"
+                    onClick={clearAllFilters}
+                    className="px-4 py-2 bg-gray-500 text-white rounded-md hover:bg-gray-600 whitespace-nowrap"
                   >
-                    Clear
+                    Clear All
                   </button>
                 )}
               </div>
-              <p className="text-sm text-gray-600 mt-2">
+
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Status</label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="Current Student">Current Student</option>
+                    <option value="Suspended">Suspended</option>
+                    <option value="Graduate">Graduate</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Game</label>
+                  <select
+                    value={gameFilter}
+                    onChange={(e) => setGameFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">All Games</option>
+                    {["craps", "roulette", "blackjack", "baccarat", "poker", "pai-gow", "keno", "uth", "sic-bo"].map((game) => (
+                      <option key={game} value={game} className="capitalize">
+                        {game.charAt(0).toUpperCase() + game.slice(1)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Registration (after)</label>
+                  <input
+                    type="date"
+                    value={registrationDateFilter}
+                    onChange={(e) => setRegistrationDateFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">End of Class (after)</label>
+                  <input
+                    type="date"
+                    value={endOfClassDateFilter}
+                    onChange={(e) => setEndOfClassDateFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1">End of Practice (after)</label>
+                  <input
+                    type="date"
+                    value={endOfPracticeDateFilter}
+                    onChange={(e) => setEndOfPracticeDateFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <p className="text-sm text-gray-600">
                 Showing {filteredStudents.length} of {students.length} students
               </p>
             </div>
@@ -345,19 +508,6 @@ const AdminPanel = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left">
-                        <input
-                          type="checkbox"
-                          checked={
-                            paginatedStudents.length > 0 &&
-                            paginatedStudents.every((s) =>
-                              selectedStudents.includes(s._id)
-                            )
-                          }
-                          onChange={toggleSelectAll}
-                          className="rounded"
-                        />
-                      </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Name
                       </th>
@@ -386,16 +536,6 @@ const AdminPanel = () => {
                       const totalHours = calculateTotalHours(student.sessions);
                       return (
                         <tr key={student._id}>
-                          <td className="px-6 py-4">
-                            <input
-                              type="checkbox"
-                              checked={selectedStudents.includes(student._id)}
-                              onChange={() =>
-                                toggleStudentSelection(student._id)
-                              }
-                              className="rounded"
-                            />
-                          </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm font-medium text-gray-900">
                               {getFullName(student)}
@@ -455,8 +595,8 @@ const AdminPanel = () => {
 
               {paginatedStudents.length === 0 && !loading && (
                 <div className="text-center py-8 text-gray-500">
-                  {searchTerm
-                    ? "No students found matching your search."
+                  {hasActiveFilters
+                    ? "No students found matching your filters."
                     : "No students found. Add your first student using the button above."}
                 </div>
               )}
@@ -509,251 +649,6 @@ const AdminPanel = () => {
         </div>
       </div>
     </>
-  );
-};
-
-// Roster Export Modal Component
-const RosterExportModal = ({ students, onClose, getFullName }) => {
-  const API = process.env.NEXT_PUBLIC_API_URL;
-  const [dateFilter, setDateFilter] = useState("");
-  const [registrationDateFilter, setRegistrationDateFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
-  const [exporting, setExporting] = useState(false);
-
-  const statusOptions = ["Current Student", "Suspended", "Graduate", "Other"];
-
-  const getLastCheckoutDate = (student) => {
-    if (!student.sessions || student.sessions.length === 0) return null;
-
-    const sessionsWithCheckout = student.sessions.filter((s) => s.checkout);
-    if (sessionsWithCheckout.length === 0) return null;
-
-    const sortedSessions = sessionsWithCheckout.sort(
-      (a, b) => new Date(b.checkout) - new Date(a.checkout)
-    );
-
-    return sortedSessions[0].checkout;
-  };
-
-  const filterStudents = () => {
-    let filtered = students;
-
-    // Filter by status
-    if (statusFilter) {
-      filtered = filtered.filter((s) => s.status === statusFilter);
-    }
-
-    // Filter by date: last checkout OR registration date (either match passes)
-    if (dateFilter || registrationDateFilter) {
-      filtered = filtered.filter((s) => {
-        let matchesCheckout = false;
-        let matchesRegistration = false;
-
-        if (dateFilter) {
-          const filterDate = new Date(dateFilter);
-          filterDate.setHours(0, 0, 0, 0);
-          const lastCheckout = getLastCheckoutDate(s);
-          if (lastCheckout) {
-            const checkoutDate = new Date(lastCheckout);
-            checkoutDate.setHours(0, 0, 0, 0);
-            matchesCheckout = checkoutDate >= filterDate;
-          }
-        }
-
-        if (registrationDateFilter) {
-          const regFilterDate = new Date(registrationDateFilter);
-          regFilterDate.setHours(0, 0, 0, 0);
-          if (s.registrationDate) {
-            const regDate = new Date(s.registrationDate);
-            regDate.setHours(0, 0, 0, 0);
-            matchesRegistration = regDate >= regFilterDate;
-          }
-        }
-
-        // OR logic: if both filters are set, either can match
-        if (dateFilter && registrationDateFilter) {
-          return matchesCheckout || matchesRegistration;
-        }
-        // If only one filter is set, use that result
-        if (dateFilter) return matchesCheckout;
-        return matchesRegistration;
-      });
-    }
-
-    return filtered;
-  };
-
-  const exportRoster = () => {
-    setExporting(true);
-    const filteredStudents = filterStudents();
-
-    if (filteredStudents.length === 0) {
-      alert("No students match the selected filters");
-      setExporting(false);
-      return;
-    }
-
-    const csv = generateRosterCSV(filteredStudents);
-    downloadCSV(
-      csv,
-      `student-roster-${new Date().toISOString().split("T")[0]}.csv`
-    );
-    setExporting(false);
-    onClose();
-  };
-
-  const generateRosterCSV = (students) => {
-    const headers = [
-      "First Name",
-      "Last Name",
-      "PIN",
-      "ID Number",
-      "Email",
-      "Phone",
-      "Street",
-      "City",
-      "State",
-      "Zip Code",
-      "Foreign Address",
-      "Status",
-      "Source",
-      "Registration Date",
-      "End of Class Date",
-      "End of Practice Date",
-      "Last Checkout Date",
-    ];
-    const rows = [headers];
-
-    students.forEach((student) => {
-      const lastCheckout = getLastCheckoutDate(student);
-
-      rows.push([
-        student.firstName || "",
-        student.lastName || "",
-        student.pin || "",
-        student.idNumber || "",
-        student.email || "",
-        student.phone || "",
-        student.street || "",
-        student.city || "",
-        student.state || "",
-        student.zipCode || "",
-        student.foreignAddress || "",
-        student.status || "",
-        student.source || "",
-        student.registrationDate
-          ? new Date(student.registrationDate).toLocaleDateString()
-          : "",
-        student.endOfClassDate
-          ? new Date(student.endOfClassDate).toLocaleDateString()
-          : "",
-        student.endOfPracticeDate
-          ? new Date(student.endOfPracticeDate).toLocaleDateString()
-          : "",
-        lastCheckout ? new Date(lastCheckout).toLocaleString() : "Never",
-      ]);
-    });
-
-    return rows
-      .map((row) => row.map((cell) => `"${cell}"`).join(","))
-      .join("\n");
-  };
-
-  const downloadCSV = (csv, filename) => {
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", filename);
-    link.style.visibility = "hidden";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const filteredCount = filterStudents().length;
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-        <h3 className="text-xl font-bold mb-4">Roster Export</h3>
-
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Filter by Status
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">All Statuses</option>
-              {statusOptions.map((status) => (
-                <option key={status} value={status}>
-                  {status}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Filter by Registration Date (on or after)
-            </label>
-            <input
-              type="date"
-              value={registrationDateFilter}
-              onChange={(e) => setRegistrationDateFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Filter by Last Checkout Date (on or after)
-            </label>
-            <input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          {registrationDateFilter && dateFilter && (
-            <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-md">
-              <p className="text-xs text-yellow-800">
-                Both date filters active: students matching <strong>either</strong> date will be included.
-              </p>
-            </div>
-          )}
-
-          <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-            <p className="text-sm text-blue-800">
-              <strong>{filteredCount}</strong> student
-              {filteredCount !== 1 ? "s" : ""} will be exported
-            </p>
-          </div>
-
-          <div className="flex space-x-3">
-            <button
-              onClick={exportRoster}
-              disabled={exporting || filteredCount === 0}
-              className="flex-1 bg-orange-600 text-white py-2 px-4 rounded-md hover:bg-orange-700 disabled:opacity-50"
-            >
-              {exporting ? "Exporting..." : "Export Roster"}
-            </button>
-            <button
-              onClick={onClose}
-              className="flex-1 bg-gray-500 text-white py-2 px-4 rounded-md hover:bg-gray-600"
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
   );
 };
 
