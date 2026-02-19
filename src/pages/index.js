@@ -307,7 +307,7 @@ const StudentLogin = () => {
 
                 {nameQuery.trim().length > 0 && matchingStudents.length === 0 && (
                   <p className="text-sm text-gray-500 text-center">
-                    No students found matching "{nameQuery}"
+                    No students found matching &quot;{nameQuery}&quot;
                   </p>
                 )}
               </div>
