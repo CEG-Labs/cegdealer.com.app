@@ -6,6 +6,14 @@ import Head from "next/head";
 const API = process.env.NEXT_PUBLIC_API_URL;
 const ITEMS_PER_PAGE = 25;
 
+const GAME_DISPLAY_NAMES = {
+  sr: "SR",
+  uth: "UTH",
+};
+
+const getGameDisplayName = (game) =>
+  GAME_DISPLAY_NAMES[game] || game.charAt(0).toUpperCase() + game.slice(1);
+
 const AdminPanel = () => {
   const [students, setStudents] = useState([]);
   const [filteredStudents, setFilteredStudents] = useState([]);
@@ -13,6 +21,7 @@ const AdminPanel = () => {
   const [error, setError] = useState("");
   const [editingStudent, setEditingStudent] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [gameFilter, setGameFilter] = useState("");
@@ -21,6 +30,9 @@ const AdminPanel = () => {
   const [endOfPracticeDateFilter, setEndOfPracticeDateFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showExportMenu, setShowExportMenu] = useState(false);
+  const [sortColumn, setSortColumn] = useState("lastName");
+  const [sortDirection, setSortDirection] = useState("asc");
+  const [historyStudent, setHistoryStudent] = useState(null);
 
   useEffect(() => {
     fetchStudents();
@@ -119,6 +131,68 @@ const AdminPanel = () => {
     setEndOfClassDateFilter("");
     setEndOfPracticeDateFilter("");
   };
+
+  const handleSort = (column) => {
+    if (sortColumn === column) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
+
+  const getSortedStudents = (list) => {
+    return [...list].sort((a, b) => {
+      let aVal, bVal;
+
+      switch (sortColumn) {
+        case "name":
+          aVal = `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase();
+          bVal = `${b.lastName || ""} ${b.firstName || ""}`.toLowerCase();
+          break;
+        case "pin":
+          aVal = a.pin || "";
+          bVal = b.pin || "";
+          break;
+        case "email":
+          aVal = (a.email || "").toLowerCase();
+          bVal = (b.email || "").toLowerCase();
+          break;
+        case "status":
+          aVal = (a.status || "").toLowerCase();
+          bVal = (b.status || "").toLowerCase();
+          break;
+        case "sessions":
+          aVal = a.sessions?.length || 0;
+          bVal = b.sessions?.length || 0;
+          break;
+        case "hours":
+          aVal = calculateTotalHours(a.sessions);
+          bVal = calculateTotalHours(b.sessions);
+          break;
+        default:
+          return 0;
+      }
+
+      if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+  };
+
+  const SortHeader = ({ column, children }) => (
+    <th
+      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100 select-none"
+      onClick={() => handleSort(column)}
+    >
+      <div className="flex items-center gap-1">
+        {children}
+        {sortColumn === column && (
+          <span className="text-blue-600">{sortDirection === "asc" ? "\u25B2" : "\u25BC"}</span>
+        )}
+      </div>
+    </th>
+  );
 
   const calculateTotalHours = (sessions) => {
     if (!sessions || sessions.length === 0) return 0;
@@ -275,11 +349,12 @@ const AdminPanel = () => {
     document.body.removeChild(link);
   };
 
-  // Pagination logic
-  const totalPages = Math.ceil(filteredStudents.length / ITEMS_PER_PAGE);
+  // Sort then paginate
+  const sortedStudents = getSortedStudents(filteredStudents);
+  const totalPages = Math.ceil(sortedStudents.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
-  const paginatedStudents = filteredStudents.slice(startIndex, endIndex);
+  const paginatedStudents = sortedStudents.slice(startIndex, endIndex);
 
   const goToPage = (page) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
@@ -382,7 +457,12 @@ const AdminPanel = () => {
                   )}
                 </div>
                 <button
-                  onClick={() => setShowAddForm(true)}
+                  onClick={() => {
+                    setEditingStudent(null);
+                    setHistoryStudent(null);
+                    setShowAddForm(true);
+                    setDrawerOpen(true);
+                  }}
                   className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
                 >
                   Add New Student
@@ -396,21 +476,91 @@ const AdminPanel = () => {
               </div>
             )}
 
-            {/* Add/Edit Form */}
-            {(showAddForm || editingStudent) && (
-              <StudentForm
-                student={editingStudent}
-                onSave={() => {
-                  fetchStudents();
-                  setEditingStudent(null);
-                  setShowAddForm(false);
-                }}
-                onCancel={() => {
-                  setEditingStudent(null);
-                  setShowAddForm(false);
+            {/* Slide-out Drawer */}
+            <div
+              className={`fixed inset-0 z-40 transition-opacity duration-300 ${
+                drawerOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"
+              }`}
+            >
+              {/* Backdrop */}
+              <div
+                className="absolute inset-0 bg-black/20"
+                onClick={() => {
+                  setDrawerOpen(false);
+                  setTimeout(() => {
+                    setEditingStudent(null);
+                    setShowAddForm(false);
+                    setHistoryStudent(null);
+                  }, 300);
                 }}
               />
-            )}
+
+              {/* Drawer panel */}
+              <div
+                className={`absolute top-0 right-0 h-full w-full max-w-2xl bg-white shadow-xl transform transition-transform duration-300 ${
+                  drawerOpen ? "translate-x-0" : "translate-x-full"
+                }`}
+              >
+                {/* Drawer header with X */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+                  <h3 className="text-lg font-semibold">
+                    {historyStudent
+                      ? `${getFullName(historyStudent)} - History`
+                      : editingStudent
+                      ? "Edit Student"
+                      : "Add New Student"}
+                  </h3>
+                  <button
+                    onClick={() => {
+                      setDrawerOpen(false);
+                      setTimeout(() => {
+                        setEditingStudent(null);
+                        setShowAddForm(false);
+                        setHistoryStudent(null);
+                      }, 300);
+                    }}
+                    className="text-gray-400 hover:text-gray-600 p-1"
+                  >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Drawer body */}
+                <div className="overflow-y-auto h-[calc(100%-65px)]">
+                  {historyStudent && (
+                    <StudentHistoryPanel
+                      key={`history-${historyStudent._id}`}
+                      studentId={historyStudent._id}
+                      getFullName={getFullName}
+                      onRefresh={fetchStudents}
+                    />
+                  )}
+                  {(showAddForm || editingStudent) && !historyStudent && (
+                    <StudentForm
+                      key={editingStudent?._id || "new"}
+                      student={editingStudent}
+                      onSave={() => {
+                        fetchStudents();
+                        setDrawerOpen(false);
+                        setTimeout(() => {
+                          setEditingStudent(null);
+                          setShowAddForm(false);
+                        }, 300);
+                      }}
+                      onCancel={() => {
+                        setDrawerOpen(false);
+                        setTimeout(() => {
+                          setEditingStudent(null);
+                          setShowAddForm(false);
+                        }, 300);
+                      }}
+                    />
+                  )}
+                </div>
+              </div>
+            </div>
 
             {/* Filters */}
             <div className="bg-white rounded-lg shadow p-4 space-y-3">
@@ -458,9 +608,9 @@ const AdminPanel = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">All Games</option>
-                    {["craps", "roulette", "blackjack", "baccarat", "poker", "pai-gow", "keno", "uth", "sic-bo"].map((game) => (
-                      <option key={game} value={game} className="capitalize">
-                        {game.charAt(0).toUpperCase() + game.slice(1)}
+                    {["craps", "roulette", "blackjack", "baccarat", "poker", "pai-gow", "keno", "uth", "sic-bo", "sr"].map((game) => (
+                      <option key={game} value={game}>
+                        {getGameDisplayName(game)}
                       </option>
                     ))}
                   </select>
@@ -508,24 +658,12 @@ const AdminPanel = () => {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Name
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        PIN
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Email
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Status
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Sessions
-                      </th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Total Hours
-                      </th>
+                      <SortHeader column="name">Name</SortHeader>
+                      <SortHeader column="pin">PIN</SortHeader>
+                      <SortHeader column="email">Email</SortHeader>
+                      <SortHeader column="status">Status</SortHeader>
+                      <SortHeader column="sessions">Sessions</SortHeader>
+                      <SortHeader column="hours">Total Hours</SortHeader>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Actions
                       </th>
@@ -567,14 +705,24 @@ const AdminPanel = () => {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                            <Link
-                              href={`/admin/student/${student._id}`}
+                            <button
+                              onClick={() => {
+                                setEditingStudent(null);
+                                setShowAddForm(false);
+                                setHistoryStudent(student);
+                                setDrawerOpen(true);
+                              }}
                               className="text-green-600 hover:text-green-900"
                             >
                               History
-                            </Link>
+                            </button>
                             <button
-                              onClick={() => setEditingStudent(student)}
+                              onClick={() => {
+                                setShowAddForm(false);
+                                setHistoryStudent(null);
+                                setEditingStudent(student);
+                                setDrawerOpen(true);
+                              }}
                               className="text-blue-600 hover:text-blue-900"
                             >
                               Edit
@@ -652,6 +800,245 @@ const AdminPanel = () => {
   );
 };
 
+// Student History Panel Component (for drawer)
+const StudentHistoryPanel = ({ studentId, getFullName, onRefresh }) => {
+  const API = process.env.NEXT_PUBLIC_API_URL;
+  const [student, setStudent] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+
+  useEffect(() => {
+    fetchStudent();
+  }, [studentId]);
+
+  const fetchStudent = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API}/users/${studentId}`);
+      if (response.ok) {
+        setStudent(await response.json());
+      } else {
+        setError("Student not found");
+      }
+    } catch (err) {
+      setError("Failed to fetch student data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const deleteSession = async (sessionIndex) => {
+    if (!confirm("Are you sure you want to delete this session record?")) return;
+    try {
+      const response = await fetch(`${API}/users/${studentId}/session/${sessionIndex}`, {
+        method: "DELETE",
+      });
+      if (response.ok) {
+        fetchStudent();
+        onRefresh();
+      } else {
+        setError("Failed to delete session");
+      }
+    } catch (err) {
+      setError("Error connecting to server");
+    }
+  };
+
+  const filterSessionsByDateRange = (sessions) => {
+    if (!dateRange.start && !dateRange.end) return sessions;
+    return sessions.filter((session) => {
+      const checkinDate = new Date(session.checkin);
+      const startDate = dateRange.start ? new Date(dateRange.start) : null;
+      const endDate = dateRange.end ? new Date(dateRange.end + "T23:59:59") : null;
+      if (startDate && checkinDate < startDate) return false;
+      if (endDate && checkinDate > endDate) return false;
+      return true;
+    });
+  };
+
+  const exportSessions = () => {
+    if (!student?.sessions?.length) return;
+    const sessionsToExport = filterSessionsByDateRange(student.sessions);
+    if (sessionsToExport.length === 0) {
+      alert("No sessions in the selected date range");
+      return;
+    }
+    const headers = ["Check-in", "Check-out", "Hours"];
+    const rows = [headers];
+    sessionsToExport.forEach((s) => {
+      rows.push([
+        s.checkin ? new Date(s.checkin).toLocaleString() : "",
+        s.checkout ? new Date(s.checkout).toLocaleString() : "In Progress",
+        s.hours ? s.hours.toFixed(2) : "",
+      ]);
+    });
+    const csv = rows.map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    link.setAttribute("href", URL.createObjectURL(blob));
+    link.setAttribute("download", `${getFullName(student).replace(/\s+/g, "-")}-sessions.csv`);
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  if (loading) return <div className="p-6 text-center text-gray-500">Loading...</div>;
+  if (error || !student) return <div className="p-6 text-center text-red-600">{error}</div>;
+
+  const sortedSessions = [...(student.sessions || [])].sort(
+    (a, b) => new Date(b.checkin) - new Date(a.checkin)
+  );
+  const filteredSessions = filterSessionsByDateRange(sortedSessions);
+  const totalHours = filteredSessions.reduce((sum, s) => sum + (s.hours || 0), 0);
+
+  return (
+    <div className="p-6 space-y-4">
+      {/* Student info summary */}
+      <div className="grid grid-cols-3 gap-3 text-sm">
+        <div>
+          <span className="text-gray-500">PIN:</span>
+          <p className="font-medium">{student.pin}</p>
+        </div>
+        <div>
+          <span className="text-gray-500">Status:</span>
+          <p className="font-medium">{student.status || "N/A"}</p>
+        </div>
+        <div>
+          <span className="text-gray-500">Email:</span>
+          <p className="font-medium">{student.email || "N/A"}</p>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="text-center p-3 bg-blue-50 rounded-lg">
+          <div className="text-xl font-bold text-blue-600">{filteredSessions.length}</div>
+          <div className="text-xs text-gray-600">Sessions</div>
+        </div>
+        <div className="text-center p-3 bg-purple-50 rounded-lg">
+          <div className="text-xl font-bold text-purple-600">{totalHours.toFixed(2)}</div>
+          <div className="text-xs text-gray-600">Total Hours</div>
+        </div>
+        <div className="text-center p-3 bg-green-50 rounded-lg">
+          <div className="text-xl font-bold text-green-600">
+            {filteredSessions.length > 0 ? (totalHours / filteredSessions.length).toFixed(2) : "0"}
+          </div>
+          <div className="text-xs text-gray-600">Avg Hours</div>
+        </div>
+      </div>
+
+      {/* Date filter & export */}
+      <div className="flex flex-wrap gap-2 items-end">
+        <div className="flex-1 min-w-[140px]">
+          <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+          <input
+            type="date"
+            value={dateRange.start}
+            onChange={(e) => setDateRange((prev) => ({ ...prev, start: e.target.value }))}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div className="flex-1 min-w-[140px]">
+          <label className="block text-xs text-gray-500 mb-1">End Date</label>
+          <input
+            type="date"
+            value={dateRange.end}
+            onChange={(e) => setDateRange((prev) => ({ ...prev, end: e.target.value }))}
+            className="w-full px-2 py-1.5 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div className="flex gap-2">
+          {(dateRange.start || dateRange.end) && (
+            <button
+              onClick={() => setDateRange({ start: "", end: "" })}
+              className="px-3 py-1.5 bg-gray-500 text-white text-sm rounded-md hover:bg-gray-600"
+            >
+              Clear
+            </button>
+          )}
+          <button
+            onClick={exportSessions}
+            className="px-3 py-1.5 bg-green-600 text-white text-sm rounded-md hover:bg-green-700"
+          >
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      {/* Sessions table */}
+      {filteredSessions.length === 0 ? (
+        <div className="text-center py-6 text-gray-500">
+          {sortedSessions.length === 0 ? "No sessions recorded." : "No sessions in the selected date range."}
+        </div>
+      ) : (
+        <div className="overflow-x-auto border border-gray-200 rounded-lg">
+          <table className="min-w-full divide-y divide-gray-200 text-sm">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">#</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Check-in</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Check-out</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Hours</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {filteredSessions.map((session, index) => {
+                const isActive = !session.checkout;
+                return (
+                  <tr key={index} className={index === 0 ? "bg-green-50" : ""}>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      {index === 0 && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 mr-1">
+                          Latest
+                        </span>
+                      )}
+                      {isActive && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800 mr-1">
+                          Active
+                        </span>
+                      )}
+                      {filteredSessions.length - index}
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">{formatDate(session.checkin)}</td>
+                    <td className={`px-4 py-2 whitespace-nowrap ${isActive ? "text-yellow-600 font-medium" : ""}`}>
+                      {session.checkout ? formatDate(session.checkout) : "In Progress"}
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap font-semibold">
+                      {session.hours ? session.hours.toFixed(2) : "-"}
+                    </td>
+                    <td className="px-4 py-2 whitespace-nowrap">
+                      <button
+                        onClick={() => deleteSession(student.sessions.indexOf(session))}
+                        className="text-red-600 hover:text-red-900 text-xs"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Student Form Component (for Add/Edit)
 const StudentForm = ({ student, onSave, onCancel }) => {
   const API = process.env.NEXT_PUBLIC_API_URL;
@@ -680,6 +1067,7 @@ const StudentForm = ({ student, onSave, onCancel }) => {
       : "",
     roles: student?.roles || ["student"],
     games: student?.games || [],
+    notes: student?.notes || "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -694,6 +1082,7 @@ const StudentForm = ({ student, onSave, onCancel }) => {
     "keno",
     "uth",
     "sic-bo",
+    "sr",
   ];
   const statusOptions = [
     "Current Student",
@@ -793,11 +1182,7 @@ const StudentForm = ({ student, onSave, onCancel }) => {
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-md">
-      <h3 className="text-lg font-semibold mb-4">
-        {student ? "Edit Student" : "Add New Student"}
-      </h3>
-
+    <div className="p-6">
       <div className="space-y-4">
         {/* Basic Information */}
         <div className="border-b pb-4">
@@ -1085,10 +1470,26 @@ const StudentForm = ({ student, onSave, onCancel }) => {
                   onChange={() => handleGameToggle(game)}
                   className="rounded"
                 />
-                <span className="text-sm capitalize">{game}</span>
+                <span className="text-sm">{getGameDisplayName(game)}</span>
               </label>
             ))}
           </div>
+        </div>
+
+        {/* Notes */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Notes
+          </label>
+          <textarea
+            value={formData.notes}
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, notes: e.target.value }))
+            }
+            rows={4}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Additional notes about this student..."
+          />
         </div>
 
         {error && (
