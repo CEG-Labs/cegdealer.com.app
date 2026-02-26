@@ -14,6 +14,15 @@ const GAME_DISPLAY_NAMES = {
 const getGameDisplayName = (game) =>
   GAME_DISPLAY_NAMES[game] || game.charAt(0).toUpperCase() + game.slice(1);
 
+const getStatusDisplay = (student) => {
+  const status = student.status || "N/A";
+  if (!student.statusChangedDate || !student.status) return status;
+  const days = Math.floor(
+    (Date.now() - new Date(student.statusChangedDate).getTime()) / 86400000
+  );
+  return `${status} (${days} day${days !== 1 ? "s" : ""})`;
+};
+
 const AdminPanel = () => {
   const [students, setStudents] = useState([]);
   const [filteredStudents, setFilteredStudents] = useState([]);
@@ -30,7 +39,7 @@ const AdminPanel = () => {
   const [endOfPracticeDateFilter, setEndOfPracticeDateFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [showExportMenu, setShowExportMenu] = useState(false);
-  const [sortColumn, setSortColumn] = useState("lastName");
+  const [sortColumn, setSortColumn] = useState("name");
   const [sortDirection, setSortDirection] = useState("asc");
   const [historyStudent, setHistoryStudent] = useState(null);
 
@@ -58,15 +67,43 @@ const AdminPanel = () => {
   const filterStudents = () => {
     let filtered = students;
 
-    // Text search: name or email
+    // Text search: multi-word with relevance scoring
     if (searchTerm.trim()) {
-      const term = searchTerm.toLowerCase();
-      filtered = filtered.filter(
-        (student) =>
-          (student.firstName && student.firstName.toLowerCase().includes(term)) ||
-          (student.lastName && student.lastName.toLowerCase().includes(term)) ||
-          (student.email && student.email.toLowerCase().includes(term))
-      );
+      const terms = searchTerm.toLowerCase().split(/\s+/).filter(Boolean);
+      filtered = filtered
+        .map((student) => {
+          const firstName = (student.firstName || "").toLowerCase();
+          const lastName = (student.lastName || "").toLowerCase();
+          const email = (student.email || "").toLowerCase();
+
+          let totalScore = 0;
+          let allTermsMatch = true;
+
+          for (const term of terms) {
+            let termScore = 0;
+            // Exact match on name field (highest)
+            if (firstName === term || lastName === term) {
+              termScore = 3;
+            }
+            // Starts-with match
+            else if (firstName.startsWith(term) || lastName.startsWith(term)) {
+              termScore = 2;
+            }
+            // Contains match (name or email)
+            else if (firstName.includes(term) || lastName.includes(term) || email.includes(term)) {
+              termScore = 1;
+            }
+
+            if (termScore === 0) {
+              allTermsMatch = false;
+              break;
+            }
+            totalScore += termScore;
+          }
+
+          return { ...student, _searchScore: allTermsMatch ? totalScore : 0 };
+        })
+        .filter((student) => student._searchScore > 0);
     }
 
     // Status filter
@@ -143,6 +180,11 @@ const AdminPanel = () => {
 
   const getSortedStudents = (list) => {
     return [...list].sort((a, b) => {
+      // When searching, sort by relevance score first (descending)
+      if (a._searchScore && b._searchScore && a._searchScore !== b._searchScore) {
+        return b._searchScore - a._searchScore;
+      }
+
       let aVal, bVal;
 
       switch (sortColumn) {
@@ -158,10 +200,18 @@ const AdminPanel = () => {
           aVal = (a.email || "").toLowerCase();
           bVal = (b.email || "").toLowerCase();
           break;
-        case "status":
-          aVal = (a.status || "").toLowerCase();
-          bVal = (b.status || "").toLowerCase();
-          break;
+        case "status": {
+          const aStatus = (a.status || "").toLowerCase();
+          const bStatus = (b.status || "").toLowerCase();
+          if (aStatus !== bStatus) {
+            if (aStatus < bStatus) return sortDirection === "asc" ? -1 : 1;
+            if (aStatus > bStatus) return sortDirection === "asc" ? 1 : -1;
+          }
+          // Same status: sort by longest duration first (earliest date first)
+          const aDate = a.statusChangedDate ? new Date(a.statusChangedDate).getTime() : Infinity;
+          const bDate = b.statusChangedDate ? new Date(b.statusChangedDate).getTime() : Infinity;
+          return aDate - bDate;
+        }
         case "sessions":
           aVal = a.sessions?.length || 0;
           bVal = b.sessions?.length || 0;
@@ -262,6 +312,7 @@ const AdminPanel = () => {
       "Zip Code",
       "Foreign Address",
       "Status",
+      "Status Changed Date",
       "Source",
       "Registration Date",
       "End of Class Date",
@@ -285,6 +336,9 @@ const AdminPanel = () => {
         student.zipCode || "",
         student.foreignAddress || "",
         student.status || "",
+        student.statusChangedDate
+          ? new Date(student.statusChangedDate).toLocaleDateString()
+          : "",
         student.source || "",
         student.registrationDate
           ? new Date(student.registrationDate).toLocaleDateString()
@@ -595,6 +649,7 @@ const AdminPanel = () => {
                     <option value="">All Statuses</option>
                     <option value="Current Student">Current Student</option>
                     <option value="Suspended">Suspended</option>
+                    <option value="Paused">Paused</option>
                     <option value="Graduate">Graduate</option>
                     <option value="Other">Other</option>
                   </select>
@@ -691,7 +746,7 @@ const AdminPanel = () => {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">
-                              {student.status || "N/A"}
+                              {getStatusDisplay(student)}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -914,7 +969,7 @@ const StudentHistoryPanel = ({ studentId, getFullName, onRefresh }) => {
         </div>
         <div>
           <span className="text-gray-500">Status:</span>
-          <p className="font-medium">{student.status || "N/A"}</p>
+          <p className="font-medium">{getStatusDisplay(student)}</p>
         </div>
         <div>
           <span className="text-gray-500">Email:</span>
@@ -1087,6 +1142,7 @@ const StudentForm = ({ student, onSave, onCancel }) => {
   const statusOptions = [
     "Current Student",
     "Suspended",
+    "Paused",
     "Graduate",
     "Other",
     "",
@@ -1152,12 +1208,19 @@ const StudentForm = ({ student, onSave, onCancel }) => {
       const url = student ? `${API}/users/${student._id}` : `${API}/users`;
       const method = student ? "PUT" : "POST";
 
+      // Detect status change and timestamp it
+      const payload = { ...formData };
+      const originalStatus = student?.status || "";
+      if (payload.status !== originalStatus) {
+        payload.statusChangedDate = new Date().toISOString();
+      }
+
       const response = await fetch(url, {
         method,
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {

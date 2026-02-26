@@ -26,12 +26,42 @@ const StudentLogin = () => {
 
   useEffect(() => {
     if (nameQuery.trim().length > 0) {
-      const term = nameQuery.toLowerCase();
-      const matches = allStudents.filter(
-        (s) =>
-          (s.firstName && s.firstName.toLowerCase().includes(term)) ||
-          (s.lastName && s.lastName.toLowerCase().includes(term))
-      );
+      const terms = nameQuery.toLowerCase().split(/\s+/).filter(Boolean);
+      const matches = allStudents
+        .map((s) => {
+          const firstName = (s.firstName || "").toLowerCase();
+          const lastName = (s.lastName || "").toLowerCase();
+
+          let totalScore = 0;
+          let allTermsMatch = true;
+
+          for (const term of terms) {
+            let termScore = 0;
+            if (firstName === term || lastName === term) {
+              termScore = 3;
+            } else if (firstName.startsWith(term) || lastName.startsWith(term)) {
+              termScore = 2;
+            } else if (firstName.includes(term) || lastName.includes(term)) {
+              termScore = 1;
+            }
+
+            if (termScore === 0) {
+              allTermsMatch = false;
+              break;
+            }
+            totalScore += termScore;
+          }
+
+          return { ...s, _searchScore: allTermsMatch ? totalScore : 0 };
+        })
+        .filter((s) => s._searchScore > 0)
+        .sort((a, b) => {
+          // Sort by relevance score (descending), then lastName, firstName
+          if (a._searchScore !== b._searchScore) return b._searchScore - a._searchScore;
+          const aName = `${a.lastName || ""} ${a.firstName || ""}`.toLowerCase();
+          const bName = `${b.lastName || ""} ${b.firstName || ""}`.toLowerCase();
+          return aName.localeCompare(bName);
+        });
       setMatchingStudents(matches);
     } else {
       setMatchingStudents([]);
