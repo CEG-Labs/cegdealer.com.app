@@ -163,15 +163,16 @@ const StudentLogin = () => {
   const handlePinSubmit = async () => {
     if (!pin || !selectedStudent) return;
 
-    setLoading(true);
     setError("");
     setValidationError("");
 
-    if (selectedStudent.pin !== pin) {
+    if (selectedStudent.pin?.trim() !== pin.trim()) {
+      setPin("");
       setError("Incorrect PIN. Please try again.");
-      setLoading(false);
       return;
     }
+
+    setLoading(true);
 
     // Refetch the student to get current session data
     try {

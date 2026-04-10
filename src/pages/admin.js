@@ -1209,7 +1209,7 @@ const StudentForm = ({ student, onSave, onCancel }) => {
       const method = student ? "PUT" : "POST";
 
       // Detect status change and timestamp it
-      const payload = { ...formData };
+      const payload = { ...formData, pin: formData.pin?.trim() };
       const originalStatus = student?.status || "";
       if (payload.status !== originalStatus) {
         payload.statusChangedDate = new Date().toISOString();
